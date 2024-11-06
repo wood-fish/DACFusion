@@ -1,0 +1,10 @@
+train: /home/qjc/DataSet/LLvip/LLVIP/visible/train
+test: /home/qjc/DataSet/LLvip/LLVIP/visible/test
+val: /home/qjc/DataSet/LLvip/LLVIP/visible/test
+
+
+# number of classes
+nc: 1
+
+# class names
+names: ['person']

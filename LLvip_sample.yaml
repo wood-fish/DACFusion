@@ -1,0 +1,17 @@
+#train: /home/qjc/DataSet/LLvip/LLVIP/visible/train
+#test: /home/qjc/DataSet/LLvip/LLVIP/visible/test
+#val: /home/qjc/DataSet/LLvip/LLVIP/visible/test
+#
+#train: /home/qjc/DataSet/LLvip/LLVIP/infrared/train
+#test: /home/qjc/DataSet/LLvip/LLVIP/infrared/test
+#val: /home/qjc/DataSet/LLvip/LLVIP/infrared/test
+
+train: /home/qjc/DataSet/LLvip/LLVIP/train_sample.txt
+test: /home/qjc/DataSet/LLvip/LLVIP/test.txt
+val: /home/qjc/DataSet/LLvip/LLVIP/test.txt
+
+# number of classes
+nc: 1
+
+# class names
+names: ['person']
