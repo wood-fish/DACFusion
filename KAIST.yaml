@@ -1,8 +1,0 @@
-train: /home/qjc/DataSet/KAIST/visible/train/
-test: /home/qjc/DataSet/KAIST/visible/test/
-val: /home/qjc/DataSet/KAIST/visible/test/
-# number of classes
-nc: 1
-
-# class names
-names: ['person']

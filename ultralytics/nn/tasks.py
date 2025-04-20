@@ -9,8 +9,8 @@ import torch
 import torch.nn as nn
 
 
-from ultralytics.nn.backbone.lsknet import *
-from ultralytics.nn.backbone.lsknet_mul import *
+
+from ultralytics.nn.backbone.DACnet_mul import *
 
 
 import ast
@@ -158,160 +158,6 @@ class BaseModel(nn.Module):
                 #     feature_visualization(x_ir, m.type, m.i, save_dir=visualize)
 
         return x
-    # def _predict_once(self, x, x_ir=None, profile=False, visualize=False):
-    #     """
-    #     Perform a forward pass through the network.
-    #     Args:
-    #         x (torch.Tensor): The RGB input tensor to the model.
-    #         x_ir (torch.Tensor | None): The IR input tensor to the model, defaults to None.
-    #         profile (bool): Print the computation time of each layer if True, defaults to False.
-    #         visualize (bool): Save the feature maps of the model if True, defaults to False.
-    #     Returns:
-    #         (torch.Tensor): The last output of the model.
-    #     """
-    #     y, dt = [], [] # outputs
-    #
-    #     for m in self.model:
-    #         if m.f != -1:  # if not from previous layer
-    #             x = y[m.f] if isinstance(m.f, int) else [x if j == -1 else y[j] for j in m.f]
-    #
-    #
-    #         if profile:
-    #             self._profile_one_layer(m, x, dt)
-    #
-    #         if hasattr(m, 'backbone') and m.backbone==True:  # backbone handling
-    #             x = m(x)
-    #             for _ in range(5 - len(x)):
-    #                 x.insert(0, None)
-    #             for i_idx, i in enumerate(x):
-    #                 if i_idx in self.save:
-    #                     y.append(i)
-    #                 else:
-    #                     y.append(None)
-    #             x = x[-1]
-    #         elif hasattr(m, 'backbone') and m.backbone==False:  # backbone_ir handling
-    #             if x_ir is not None:
-    #                 x_ir = m(x_ir)
-    #                 for _ in range(5 - len(x_ir)):
-    #                     x_ir.insert(0, None)
-    #                 for i_idx, i in enumerate(x_ir):
-    #                     if i_idx in self.save:
-    #                         y.append(i)
-    #                     else:
-    #                         y.append(None)
-    #                 x_ir = x_ir[-1]
-    #         else:  # other modules
-    #             x = m(x)  # run
-    #             y.append(x if m.i in self.save else None)  # save output
-    #
-    #         if visualize:
-    #             feature_visualization(x, m.type, m.i, save_dir=visualize)
-    #             if x_ir is not None:
-    #                 feature_visualization(x_ir, m.type, m.i, save_dir=visualize)
-    #
-    #     return x
-
-    # def _predict_once(self, x, x_ir=None, profile=False, visualize=False):
-    #     """
-    #     Perform a forward pass through the network.
-    #     Args:
-    #         x (torch.Tensor): The RGB input tensor to the model.
-    #         x_ir (torch.Tensor | None): The IR input tensor to the model, defaults to None.
-    #         profile (bool): Print the computation time of each layer if True, defaults to False.
-    #         visualize (bool): Save the feature maps of the model if True, defaults to False.
-    #     Returns:
-    #         (torch.Tensor): The last output of the model.
-    #     """
-    #     y, y_ir, dt = [], [], []  # outputs
-    #
-    #     for m in self.model:
-    #         if m.f != -1:  # if not from previous layer
-    #             x = y[m.f] if isinstance(m.f, int) else [x if j == -1 else y[j] for j in m.f]
-    #             if x_ir is not None:
-    #                 x_ir = y_ir[m.f] if isinstance(m.f, int) else [x_ir if j == -1 else y_ir[j] for j in m.f]
-    #
-    #         if profile:
-    #             self._profile_one_layer(m, x, dt)
-    #             if x_ir is not None:
-    #                 self._profile_one_layer(m, x_ir, dt)
-    #
-    #         if hasattr(m, 'backbone'):  # backbone handling
-    #             x = m(x)
-    #             if x_ir is not None:
-    #                 x_ir = m(x_ir)
-    #
-    #             for _ in range(5 - len(x)):
-    #                 x.insert(0, None)
-    #
-    #             for i_idx, i in enumerate(x):
-    #                 if i_idx in self.save:
-    #                     y.append(i)
-    #                 else:
-    #                     y.append(None)
-    #
-    #             if x_ir is not None:
-    #                 for _ in range(5 - len(x_ir)):
-    #                     x_ir.insert(0, None)
-    #
-    #                 for i_idx, i in enumerate(x_ir):
-    #                     if i_idx in self.save:
-    #                         y_ir.append(i)
-    #                     else:
-    #                         y_ir.append(None)
-    #
-    #             x = x[-1]
-    #             if x_ir is not None:
-    #                 x_ir = x_ir[-1]
-    #         else:
-    #             x = m(x)  # run
-    #             y.append(x if m.i in self.save else None)  # save output
-    #
-    #             if x_ir is not None:
-    #                 x_ir = m(x_ir)
-    #                 y_ir.append(x_ir if m.i in self.save else None)  # save output
-    #
-    #         if visualize:
-    #             feature_visualization(x, m.type, m.i, save_dir=visualize)
-    #             if x_ir is not None:
-    #                 feature_visualization(x_ir, m.type, m.i, save_dir=visualize)
-    #
-    #     return x #if x_ir is None else [x, x_ir]
-
-    # def _predict_once(self, x,x_ir=None, profile=False, visualize=False):
-    #     """
-    #     Perform a forward pass through the network.
-    #     Args:
-    #         x (torch.Tensor): The input tensor to the model.
-    #         profile (bool):  Print the computation time of each layer if True, defaults to False.
-    #         visualize (bool): Save the feature maps of the model if True, defaults to False.
-    #     Returns:
-    #         (torch.Tensor): The last output of the model.
-    #     """
-    #     y, dt = [], []  # outputs
-    #     for m in self.model:
-    #         if m.f != -1:  # if not from previous layer
-    #             x = y[m.f] if isinstance(m.f, int) else [x if j == -1 else y[j] for j in m.f]  # from earlier layers
-    #         if profile:
-    #             self._profile_one_layer(m, x, dt)
-    #         if hasattr(m, 'backbone'):
-    #             x = m(x)
-    #             for _ in range(5 - len(x)):
-    #                 x.insert(0, None)
-    #             for i_idx, i in enumerate(x):
-    #                 if i_idx in self.save:
-    #                     y.append(i)
-    #                 else:
-    #                     y.append(None)
-    #             # for i in x:
-    #             #     if i is not None:
-    #             #         print(i.size())
-    #             x = x[-1]
-    #         else:
-    #             x = m(x)  # run
-    #             y.append(x if m.i in self.save else None)  # save output
-    #         if visualize:
-    #             feature_visualization(x, m.type, m.i, save_dir=visualize)
-    #     return x
 
     def _predict_augment(self, x,x_ir=None):
         """Perform augmentations on input image x and return augmented inference."""
@@ -452,20 +298,6 @@ class BaseModel(nn.Module):
                 preds = self.forward(batch["img"])
         return self.criterion(preds, batch)
 
-    # def loss(self, batch, preds=None):
-    #     """
-    #     Compute loss.
-    #
-    #     Args:
-    #         batch (dict): Batch to compute loss on
-    #         preds (torch.Tensor | List[torch.Tensor]): Predictions.
-    #     """
-    #     if not hasattr(self, "criterion"):
-    #         self.criterion = self.init_criterion()
-    #
-    #     preds = self.forward(batch["img"],batch["ir"]) if preds is None else preds #point
-    #     return self.criterion(preds, batch)
-
     def init_criterion(self):
         """Initialize the loss criterion for the BaseModel."""
         raise NotImplementedError("compute_loss() needs to be implemented by task heads")
@@ -509,39 +341,6 @@ class DetectionModel(BaseModel):
         if verbose:
             self.info()
             LOGGER.info("")
-    # def __init__(self, cfg="yolov8n.yaml", ch=3, nc=None, verbose=True):  # model, input channels, number of classes
-    #     """Initialize the YOLOv8 detection model with the given config and parameters."""
-    #     super().__init__()
-    #     self.yaml = cfg if isinstance(cfg, dict) else yaml_model_load(cfg)  # cfg dict
-    #
-    #     # Define model
-    #     ch = self.yaml["ch"] = self.yaml.get("ch", ch)  # input channels
-    #     if nc and nc != self.yaml["nc"]:
-    #         LOGGER.info(f"Overriding model.yaml nc={self.yaml['nc']} with nc={nc}")
-    #         self.yaml["nc"] = nc  # override YAML value
-    #     self.model, self.save = parse_model(deepcopy(self.yaml), ch=ch, verbose=verbose)  # model, savelist
-    #     self.names = {i: f"{i}" for i in range(self.yaml["nc"])}  # default names dict
-    #     self.inplace = self.yaml.get("inplace", True)
-    #
-    #     # Build strides
-    #     m = self.model[-1]  # Detect()
-    #     if isinstance(m, Detect):  # includes all Detect subclasses like Segment, Pose, OBB, WorldDetect
-    #         s = 256  # 2x min stride
-    #         m.inplace = self.inplace
-    #         forward = lambda x: self.forward(x)[0] if isinstance(m, (Segment, Pose, OBB)) else self.forward(x)
-    #         if isinstance(m, v10Detect):
-    #             forward = lambda x: self.forward(x)["one2many"]
-    #         m.stride = torch.tensor([s / x.shape[-2] for x in forward(torch.zeros(1, ch, s, s))])  # forward
-    #         self.stride = m.stride
-    #         m.bias_init()  # only run once
-    #     else:
-    #         self.stride = torch.Tensor([32])  # default stride for i.e. RTDETR
-    #
-    #     # Init weights, biases
-    #     initialize_weights(self)
-    #     if verbose:
-    #         self.info()
-    #         LOGGER.info("")
 
     def _predict_augment(self, x,x_ir=None):
         """Perform augmentations on input image x and return augmented inference and train outputs."""
@@ -1051,89 +850,6 @@ def attempt_load_one_weight(weight, device=None, inplace=True, fuse=False):
     # Return model and ckpt
     return model, ckpt
 
-# def parse_model(d, ch, verbose=True, warehouse_manager=None):  # model_dict, input_channels(3)
-#     """Parse a YOLO model.yaml dictionary into a PyTorch model."""
-#
-#     # Args
-#     max_channels = float('inf')
-#     nc, act, scales = (d.get(x) for x in ('nc', 'activation', 'scales'))
-#     depth, width, kpt_shape = (d.get(x, 1.0) for x in ('depth_multiple', 'width_multiple', 'kpt_shape'))
-#     if scales:
-#         scale = d.get('scale')
-#         if not scale:
-#             scale = tuple(scales.keys())[0]
-#             LOGGER.warning(f"WARNING ⚠️ no model scale passed. Assuming scale='{scale}'.")
-#         depth, width, max_channels = scales[scale]
-#
-#     if act:
-#         Conv.default_act = eval(act)  # redefine default activation, i.e. Conv.default_act = nn.SiLU()
-#         if verbose:
-#             LOGGER.info(f"{colorstr('activation:')} {act}")  # print
-#
-#     if verbose:
-#         LOGGER.info(f"\n{'':>3}{'from':>20}{'n':>3}{'params':>10}  {'module':<45}{'arguments':<30}")
-#     ch_rgb = [ch]
-#     ch_ir = [ch]
-#     layers, save, is_backbone = [], [], False
-#     c2 = ch
-#     offset=4 #lsk网络的偏移值
-#
-#     # Process RGB backbone
-#     backbone_rgb_layers = []
-#     for i, (f, n, m, args) in enumerate(d['backbone']):  # from, number, module, args
-#         m_, args, c2, t, is_backbone = process_layer(d, f, n, m, args, depth, width, ch_rgb, max_channels, nc, is_backbone, verbose, i, c2)
-#         save.extend(x % (i + 4 if is_backbone else i) for x in ([f] if isinstance(f, int) else f) if x != -1)  # append to savelist
-#         backbone_rgb_layers.append(m_)
-#         if i == 0:
-#             ch_rgb = []
-#         if isinstance(c2, list):
-#             ch_rgb.extend(c2)
-#             for _ in range(5 - len(ch_rgb)):
-#                 ch_rgb.insert(0, 0)
-#         else:
-#             ch_rgb.append(c2)
-#
-#     # Process IR backbone if exists
-#     backbone_ir_layers = []
-#     if 'backbone_ir' in d:
-#         is_backbone=False
-#         c2_ir = ch  # Initialize c2 for IR backbone separately
-#         for i, (f, n, m, args) in enumerate(d['backbone_ir']):  # from, number, module, args
-#             j = i+len(backbone_rgb_layers)+offset
-#             m_, args, c2_ir, t, is_backbone = process_layer(d, f, n, m, args, depth, width, ch_ir, max_channels, nc, is_backbone, verbose,j, c2_ir)
-#             save.extend(x % (j + 4 if is_backbone else j) for x in ([f] if isinstance(f, int) else f) if x != -1)  # append to savelist
-#             backbone_ir_layers.append(m_)
-#             if i == 0:
-#                 ch_ir = []
-#             if isinstance(c2_ir, list):
-#                 ch_ir.extend(c2_ir)
-#                 for _ in range(5 - len(ch_ir)):
-#                     ch_ir.insert(0, 0)
-#             else:
-#                 ch_ir.append(c2_ir)
-#
-#     # Combine backbone layers
-#     layers.extend(backbone_rgb_layers)
-#     if backbone_ir_layers:
-#         layers.extend(backbone_ir_layers)
-#
-#     # Process head
-#     is_backbone = False
-#     ch_rgb.extend(ch_ir)
-#     for i, (f, n, m, args) in enumerate(d['head']):  # from, number, module, args
-#         j = i + len(backbone_rgb_layers) + len(backbone_ir_layers)+(offset*2 if len(backbone_ir_layers)>0 else offset)
-#         m_, args, c2, t, is_backbone = process_layer(d, f, n, m, args, depth, width, ch_rgb, max_channels, nc, is_backbone, verbose,j, c2)
-#         save.extend(x % (j + 4 if is_backbone else j) for x in ([f] if isinstance(f, int) else f) if x != -1)  # append to savelist
-#         layers.append(m_)
-#         if isinstance(c2, list):
-#             ch_rgb.extend(c2)
-#             for _ in range(5 - len(ch_rgb)):
-#                 ch_rgb.insert(0, 0)
-#         else:
-#             ch_rgb.append(c2)
-#
-#     return nn.Sequential(*layers), sorted(save)
-
 
 def parse_model(d, ch, verbose=True, warehouse_manager=None):  # model_dict, input_channels(3)
     """Parse a YOLO model.yaml dictionary into a PyTorch model."""
@@ -1176,22 +892,6 @@ def parse_model(d, ch, verbose=True, warehouse_manager=None):  # model_dict, inp
         else:
             ch_rgb.append(c2)
 
-    # Process IR backbone if exists
-    # if 'backbone_ir' in d:
-    #     for i, (f, n, m, args) in enumerate(d['backbone_ir']):  # from, number, module, args
-    #         m_, args, c2, t ,is_backbone = process_layer(d, f, n, m, args, depth, width, ch_ir, max_channels, nc, is_backbone, verbose,
-    #                                     i, c2)
-    #         save.extend(x % (i + 4 if is_backbone else i) for x in ([f] if isinstance(f, int) else f) if
-    #                     x != -1)  # append to savelist
-    #         layers.append(m_)
-    #         if i == 0:
-    #             ch_ir = []
-    #         if isinstance(c2, list):
-    #             ch_ir.extend(c2)
-    #             for _ in range(5 - len(ch_ir)):
-    #                 ch_ir.insert(0, 0)
-    #         else:
-    #             ch_ir.append(c2)
     return nn.Sequential(*layers), sorted(save)
 
 
@@ -1230,7 +930,7 @@ def process_layer(d, f, n, m, args, depth, width, ch, max_channels, nc, is_backb
             n = 1
     elif m is AIFI:
         args = [ch[f], *args]
-    elif m in {lsknet_s, lsknet_t,lsknet_s_mul, lsknet_t_mul}:
+    elif m in {DACnet_s, DACnet_t,DACnet_s_mul, DACnet_t_mul}:
         m = m(*args)
         c2 = m.channel
     elif m in (HGStem, HGBlock):

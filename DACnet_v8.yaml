@@ -10,14 +10,11 @@ scales: # model compound scaling constants, i.e. 'model=yolov8n.yaml' will call 
 # YOLOv8.0n backbone
 backbone:
   # [from, repeats, module, args]
-  - [-1, 1, lsknet_s_mul, ['/home/qjc/Project/yolov10-main/lsk_s_backbone-e9d2e551.pth']]  # 4
-#  - [-1, 1, lsknet_s, ['/home/qjc/Project/yolov10-main/lsk_s_backbone-e9d2e551.pth']]  # 4
+  - [-1, 1, DACnet_s_mul, ['/home/qjc/Project/yolov10-main/DAC_s_backbone.pth']]  # 4
+#  - [-1, 1, DACnet_s, ['/home/qjc/Project/yolov10-main/DAC_s_backbone.pth']]  # 4
   - [-1, 1, SPPF, [1024, 5]] # 5
   - [-1, 1, PSA, [1024]] # 6
 
-#backbone_ir:
-#  # [from, repeats, module, args]
-#  - [-1, 1, lsknet_s, []]  # 7
 # YOLOv8.0n head
 head:
   - [-1, 1, nn.Upsample, [None, 2, "nearest"]]
