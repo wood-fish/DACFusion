@@ -422,7 +422,85 @@ def update_weight(model_dict, weight_dict):
     print(f'loading weights... {idx}/{len(model_dict)} items')
     return model_dict
 
+def update_weight_detail(model_dict, weight_dict, verbose=True, save_report_path=None):
+    import numpy as np
 
+    idx = 0
+    temp_dict = {}
+
+    matched = []
+    shape_mismatch = []
+    only_in_weight = []
+    only_in_model = []
+
+    model_keys = set(model_dict.keys())
+    weight_keys = set(weight_dict.keys())
+
+    for k, v in weight_dict.items():
+        if k in model_dict:
+            if np.shape(model_dict[k]) == np.shape(v):
+                temp_dict[k] = v
+                matched.append(k)
+                idx += 1
+            else:
+                shape_mismatch.append((k, tuple(np.shape(v)), tuple(np.shape(model_dict[k]))))
+        else:
+            only_in_weight.append(k)
+
+    for k in model_dict.keys():
+        if k not in weight_dict:
+            only_in_model.append(k)
+
+    model_dict.update(temp_dict)
+
+    print(f'loading weights... {idx}/{len(model_dict)} items')
+    print(f'matched: {len(matched)}')
+    print(f'shape mismatch: {len(shape_mismatch)}')
+    print(f'only in weight: {len(only_in_weight)}')
+    print(f'only in model: {len(only_in_model)}')
+
+    if verbose:
+        print('\n=== Matched keys ===')
+        for k in matched:
+            print(k)
+
+        print('\n=== Shape mismatch keys ===')
+        for k, ws, ms in shape_mismatch:
+            print(f'{k}: weight{ws} vs model{ms}')
+
+        print('\n=== Only in weight ===')
+        for k in only_in_weight:
+            print(k)
+
+        print('\n=== Only in model ===')
+        for k in only_in_model:
+            print(k)
+
+    if save_report_path is not None:
+        with open(save_report_path, 'w', encoding='utf-8') as f:
+            f.write(f'loading weights... {idx}/{len(model_dict)} items\n')
+            f.write(f'matched: {len(matched)}\n')
+            f.write(f'shape mismatch: {len(shape_mismatch)}\n')
+            f.write(f'only in weight: {len(only_in_weight)}\n')
+            f.write(f'only in model: {len(only_in_model)}\n')
+
+            f.write('\n=== Matched keys ===\n')
+            for k in matched:
+                f.write(k + '\n')
+
+            f.write('\n=== Shape mismatch keys ===\n')
+            for k, ws, ms in shape_mismatch:
+                f.write(f'{k}: weight{ws} vs model{ms}\n')
+
+            f.write('\n=== Only in weight ===\n')
+            for k in only_in_weight:
+                f.write(k + '\n')
+
+            f.write('\n=== Only in model ===\n')
+            for k in only_in_model:
+                f.write(k + '\n')
+
+    return model_dict
 
 def DACnet_t_mul(weights='/home/qjc/Project/yolov10-main/DAC_t_backbone.pth.tar'):
     model = DACNet_mul(embed_dims=[32, 64, 160, 256], depths=[3, 3, 5, 2], drop_rate=0.1, drop_path_rate=0.1)
@@ -432,9 +510,10 @@ def DACnet_t_mul(weights='/home/qjc/Project/yolov10-main/DAC_t_backbone.pth.tar'
 
 
 def DACnet_s_mul(weights=''):   #/home/qjc/Project/yolov10-main/DAC_s_backbone.pth
-    model = DACNet_mul(embed_dims=[64, 128, 256, 512], depths=[2, 2, 1, 1], drop_rate=0.1, drop_path_rate=0.1)
+    model = DACNet_mul(embed_dims=[64, 128, 320, 512], depths=[2, 2, 1, 1], drop_rate=0.1, drop_path_rate=0.1)
     if weights:
         model.load_state_dict(update_weight(model.state_dict(), torch.load(weights)['state_dict']))
+        # model.load_state_dict(update_weight_detail(model.state_dict(), torch.load(weights)['state_dict'], verbose=True, save_report_path='weight_match_report.txt'))
     return model
 
 def DACnet_t(weights='/home/qjc/Project/yolov10-main/DAC_t_backbone.pth.tar'):
@@ -448,6 +527,7 @@ def DACnet_s(weights=''): #/home/qjc/Project/yolov10-main/DAC_s_backbone.pth
     model = DACNet(embed_dims=[64, 128, 256, 512], depths=[2, 2, 4, 2], drop_rate=0.1, drop_path_rate=0.1)
     if weights:
         model.load_state_dict(update_weight(model.state_dict(), torch.load(weights)['state_dict']))
+        # model.load_state_dict(update_weight_detail(model.state_dict(), torch.load(weights)['state_dict'], verbose=True, save_report_path='weight_match_report.txt'))
     return model
 
 if __name__ == '__main__':
