@@ -36,7 +36,7 @@ joblib==1.4.2
 jsonschema==4.23.0
 jsonschema-specifications==2024.10.1
 jupyter_client==8.6.3
-jupyter_core==5.7.2
+jupyter_core==5.8.0 
 jupyterlab_pygments==0.3.0
 kiwisolver==1.4.5
 lapx==0.5.10.post1
@@ -67,9 +67,8 @@ nvidia-cusolver-cu11==11.4.0.1
 nvidia-cusparse-cu11==11.7.4.91
 nvidia-nccl-cu11==2.14.3
 nvidia-nvtx-cu11==11.7.91
-onnx==1.14.0
-onnxruntime==1.15.1
-onnxruntime-gpu==1.18.0
+onnx==1.21.0 
+onnxruntime-gpu==1.21.0 
 onnxsim==0.4.36
 opencv-python==4.9.0.80
 packaging==24.0

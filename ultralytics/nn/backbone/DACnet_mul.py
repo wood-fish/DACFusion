@@ -41,26 +41,31 @@ class Mlp(nn.Module):
         x = self.drop(x)
         return x
 
-
 class AlignModule(nn.Module):
-    def __init__(self, in_channels, device):
-        super(AlignModule, self).__init__()
-        self.bn = nn.BatchNorm2d(in_channels,device=device)
+    def __init__(self, in_channels, kernel_size=3, groups_gn=8):
+        super().__init__()
+        self.dw = nn.Conv2d(in_channels, in_channels, kernel_size, padding=kernel_size//2, groups=in_channels, bias=False)
+        self.pw = nn.Conv2d(in_channels, in_channels, 1, bias=False)
+        self.gn = nn.GroupNorm(num_groups=groups_gn, num_channels=in_channels)
         self.relu = nn.ReLU(inplace=True)
 
     def forward(self, x):
-        return self.relu(self.bn(x))
+        x = self.dw(x)
+        x = self.pw(x)
+        x = self.gn(x)
+        return self.relu(x)
 
 # Block-DAC_mul
 class DACblock_mul(nn.Module):
     def __init__(self, dim):
         super().__init__()
         self.conv0 = nn.Conv2d(dim, dim, kernel_size=conv0_k, padding=conv0_p, groups=dim)
-        self.conv0_ir = nn.Conv2d(dim, dim, kernel_size=conv0_k, padding=conv0_p, groups=dim)
         self.conv_spatial_ir = nn.Conv2d(dim, dim, kernel_size=conv1_k, stride=1, padding=conv1_p, groups=dim,dilation=conv1_d)
         self.conv1 = nn.Conv2d(dim, dim // 2, 1)
         self.conv1_ir = nn.Conv2d(dim, dim // 2, 1)
-        self.conv2_ir = nn.Conv2d(dim, dim // 2, 1)
+
+        self.align_module = AlignModule(in_channels=dim//2)
+
         self.conv_squeeze = nn.Conv2d(2, 2, conv_squeeze_k, padding=conv_squeeze_p)
         self.conv = nn.Conv2d(dim // 2, dim, 1)
         self.attention = nn.Sequential(
@@ -78,9 +83,9 @@ class DACblock_mul(nn.Module):
 
         attn1 = self.conv1(attn1)
         attn1_ir = self.conv1_ir(attn1_ir)
-        align_module = AlignModule(in_channels=attn1.shape[1],device = attn1.device)
-        attn1 = align_module(attn1)
-        attn1_ir = align_module(attn1_ir)
+
+        attn1 = self.align_module(attn1)
+        attn1_ir = self.align_module(attn1_ir)
 
         attn = torch.cat([attn1, attn1_ir], dim=1)
         avg_attn = torch.mean(attn, dim=1, keepdim=True)
@@ -162,8 +167,8 @@ class Block_mul(nn.Module):
         super().__init__()
         self.norm1 = nn.BatchNorm2d(dim)
         self.norm2 = nn.BatchNorm2d(dim)
-        self.norm1_ir = nn.BatchNorm2d(dim)
-        self.norm2_ir = nn.BatchNorm2d(dim)
+        # self.norm1_ir = nn.BatchNorm2d(dim)
+        # self.norm2_ir = nn.BatchNorm2d(dim)
         self.attn_mul = Attention_mul(dim)
         self.attn_mul2 = Attention_mul(dim)
         self.attn= Attention(dim)
@@ -184,12 +189,11 @@ class Block_mul(nn.Module):
 
     def forward(self, x, x_ir):
         norm1x = self.norm1(x)
-        norm1_irx = self.norm1_ir(x_ir)
+        norm1_irx = self.norm1(x_ir)
         x = x + self.drop_path(self.layer_scale_1.unsqueeze(-1).unsqueeze(-1) * self.attn_mul(norm1x, norm1_irx))
         x = x + self.drop_path(self.layer_scale_2.unsqueeze(-1).unsqueeze(-1) * self.mlp(self.norm2(x)))
         x_ir = x_ir + self.drop_path_ir(self.layer_scale_1_ir.unsqueeze(-1).unsqueeze(-1) * self.attn_mul2(norm1_irx,norm1x))
-        # x_ir = x_ir + self.drop_path_ir(self.layer_scale_1_ir.unsqueeze(-1).unsqueeze(-1) * self.attn(self.norm1_ir(x_ir)))
-        x_ir = x_ir + self.drop_path_ir(self.layer_scale_1_ir.unsqueeze(-1).unsqueeze(-1) * self.mlp_ir(self.norm2_ir(x_ir)))
+        x_ir = x_ir + self.drop_path_ir(self.layer_scale_2_ir.unsqueeze(-1).unsqueeze(-1) * self.mlp_ir(self.norm2(x_ir)))
         return x, x_ir
 
 # Block
@@ -279,7 +283,6 @@ class DACNet_mul(nn.Module):
                                             stride=stride if i == 0 else 2 ,#stride=4 if i == 0 else 2
                                             in_chans=in_chans if i == 0 else embed_dims[i - 1],
                                             embed_dim=embed_dims[i], norm_cfg=norm_cfg)
-            self.atten = AttentionFusionBlock(dims[i])
             if i>=2:
                 block_mul = nn.ModuleList([Block_mul(
                     dim=embed_dims[i], mlp_ratio=mlp_ratios[i], drop=drop_rate, drop_path=dpr[cur + j], norm_cfg=norm_cfg)
@@ -305,8 +308,7 @@ class DACNet_mul(nn.Module):
             setattr(self, f"norm{i + 1}", norm)
             setattr(self, f"norm_ir{i + 1}", norm_ir)
 
-
-
+        self.atten = AttentionFusionBlock(dims[num_stages-1])
         self.channel = [i.size(1) for i in self.forward(torch.randn(1, 3, img_size, img_size), torch.randn(1, 3, img_size, img_size))]
 
     def forward(self, x, x_ir):
@@ -328,7 +330,7 @@ class DACNet_mul(nn.Module):
 
             x, H, W = patch_embed(x)
             x_ir, _, _ = patch_embed_ir(x_ir)
-            if i==0 or i==1: # or i==1
+            if i==0 or i==1:
                 for blk in block:
                     x = blk(x)
                 for blk in block_ir:
@@ -705,6 +707,12 @@ def DACnet_t_mul(weights='/home/qjc/Project/yolov10-main/DAC_t_backbone.pth.tar'
         model.load_state_dict(update_weight(model.state_dict(), torch.load(weights)['state_dict']))
     return model
 
+
+# def DACnet_s_mul(weights=''):   #/home/qjc/Project/yolov10-main/DAC_s_backbone.pth
+#     model = DACNet_mul(embed_dims=[64, 128, 256, 512], depths=[2, 2, 1, 1], drop_rate=0.1, drop_path_rate=0.1)
+#     if weights:
+#         model.load_state_dict(update_weight(model.state_dict(), torch.load(weights)['state_dict']))
+#     return model
 
 def DACnet_s_mul(weights=''):   #/home/qjc/Project/yolov10-main/DAC_s_backbone.pth
     model = DACNet_mul(embed_dims=[64, 128, 320, 512], depths=[2, 2, 1, 1], drop_rate=0.1, drop_path_rate=0.1)
