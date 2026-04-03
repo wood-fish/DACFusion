@@ -247,6 +247,53 @@ class v8DetectionLoss:
         return loss.sum() * batch_size, loss.detach()  # loss(box, cls, dfl)
 
 
+class v8DetectionLossWithAux(v8DetectionLoss):
+    """Detection loss with auxiliary INN reconstruction, shared consistency, and alignment losses."""
+
+    def __init__(self, model, tal_topk=10):
+        super().__init__(model, tal_topk)
+        self.lambda_rec = getattr(self.hyp, 'rec', 1.0)
+        self.lambda_shared = getattr(self.hyp, 'shared', 0.5)
+        self.lambda_align = getattr(self.hyp, 'align', 0.5)
+
+    def compute_aux_loss(self, aux):
+        """Compute auxiliary losses from INN backbone."""
+        # L_rec: INN 可逆重建损失（Stem 特征空间 12ch）
+        l_rec = F.l1_loss(aux['inn_reconstruction'], aux['inn_input'])
+        # L_shared: 共享一致性 ||Φ_shared^rgb - Φ_shared^ir||_1
+        l_shared = F.l1_loss(aux['pc_rgb_half'], aux['pc_ir_half'])
+        # L_align: 对齐损失
+        l_align = (F.l1_loss(aux['s3_aligned'], aux['s3_ir'])
+                   + F.l1_loss(aux['s4_aligned'], aux['s4_ir']))
+        return l_rec, l_shared, l_align
+
+    def __call__(self, preds, batch, aux_losses=None):
+        """Calculate detection loss + auxiliary losses."""
+        det_loss_sum, det_loss_items = super().__call__(preds, batch)
+
+        if aux_losses is None:
+            # 无辅助损失时，扩展到 6 维保持日志格式统一
+            full = torch.zeros(6, device=self.device)
+            full[:3] = det_loss_items
+            return det_loss_sum, full
+
+        batch_size = det_loss_sum / det_loss_items.sum().clamp(min=1e-6) if det_loss_items.sum() > 0 else 1.0
+
+        l_rec, l_shared, l_align = self.compute_aux_loss(aux_losses)
+
+        aux_total = (self.lambda_rec * l_rec
+                     + self.lambda_shared * l_shared
+                     + self.lambda_align * l_align) * batch_size
+
+        full = torch.zeros(6, device=self.device)
+        full[:3] = det_loss_items
+        full[3] = l_rec.detach()
+        full[4] = l_shared.detach()
+        full[5] = l_align.detach()
+
+        return det_loss_sum + aux_total, full
+
+
 class v8SegmentationLoss(v8DetectionLoss):
     """Criterion class for computing training losses."""
 

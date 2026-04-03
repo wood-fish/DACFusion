@@ -4,6 +4,7 @@ from torch.nn.modules.utils import _pair as to_2tuple
 from timm.layers import DropPath
 from functools import partial
 import numpy as np
+import torch.nn.functional as F
 
 __all__ = 'DACnet_t_mul', 'DACnet_s_mul','DACnet_t','DACnet_s'
 
@@ -50,6 +51,7 @@ class AlignModule(nn.Module):
     def forward(self, x):
         return self.relu(self.bn(x))
 
+# Block-DAC_mul
 class DACblock_mul(nn.Module):
     def __init__(self, dim):
         super().__init__()
@@ -89,7 +91,7 @@ class DACblock_mul(nn.Module):
         attn = self.conv(attn)
         return x * attn
 
-
+# Block-DAC
 class DACblock(nn.Module):
     def __init__(self, dim):
         super().__init__()
@@ -116,6 +118,7 @@ class DACblock(nn.Module):
         attn = self.conv(attn)
         return x * attn
 
+# MLK selection
 class Attention_mul(nn.Module):
     def __init__(self, d_model):
         super().__init__()
@@ -134,7 +137,7 @@ class Attention_mul(nn.Module):
         x = x + shorcut
         return x
 
-
+# MLK selection
 class Attention(nn.Module):
     def __init__(self, d_model):
         super().__init__()
@@ -153,6 +156,7 @@ class Attention(nn.Module):
         x = x + shorcut
         return x
 
+# Block_mul
 class Block_mul(nn.Module):
     def __init__(self, dim, mlp_ratio=4., drop=0., drop_path=0., act_layer=nn.GELU, norm_cfg=None):
         super().__init__()
@@ -188,6 +192,7 @@ class Block_mul(nn.Module):
         x_ir = x_ir + self.drop_path_ir(self.layer_scale_1_ir.unsqueeze(-1).unsqueeze(-1) * self.mlp_ir(self.norm2_ir(x_ir)))
         return x, x_ir
 
+# Block
 class Block(nn.Module):
     def __init__(self, dim, mlp_ratio=4., drop=0., drop_path=0., act_layer=nn.GELU, norm_cfg=None):
         super().__init__()
@@ -225,7 +230,7 @@ class OverlapPatchEmbed(nn.Module):
         return x, H, W
 
 
-
+# DACFusion的S5融合模块
 class AttentionFusionBlock(nn.Module):
     def __init__(self, dim):
         super().__init__()
@@ -412,6 +417,198 @@ class DWConv(nn.Module):
         return x
 
 
+
+class ConvBNAct(nn.Module):
+    def __init__(self, c1, c2, k=1, s=1, p=None, g=1, act=True):
+        super().__init__()
+        if p is None:
+            p = k // 2
+        self.conv = nn.Conv2d(c1, c2, k, s, p, groups=g, bias=False)
+        self.bn = nn.BatchNorm2d(c2)
+        self.act = nn.SiLU(inplace=True) if act else nn.Identity()
+
+    def forward(self, x):
+        return self.act(self.bn(self.conv(x)))
+
+# S5融合模块
+class SimpleFusion(nn.Module):
+    """
+    最简单稳定的双模态融合：
+    [rgb, ir] concat -> 1x1 -> 3x3
+    """
+    def __init__(self, c_rgb, c_ir, c_out):
+        super().__init__()
+        self.fuse = nn.Sequential(
+            ConvBNAct(c_rgb + c_ir, c_out, k=1, s=1),
+            ConvBNAct(c_out, c_out, k=3, s=1)
+        )
+
+    def forward(self, x_rgb, x_ir):
+        x = torch.cat([x_rgb, x_ir], dim=1)
+        return self.fuse(x)
+
+
+class SimpleFusionWithTopDown(nn.Module):
+    """
+    用于 F4 / F3：
+    先融合当前层 rgb+ir，再和上层上采样特征融合
+    """
+    def __init__(self, c_rgb, c_ir, c_td, c_out):
+        super().__init__()
+        self.cur_fuse = nn.Sequential(
+            ConvBNAct(c_rgb + c_ir, c_out, k=1, s=1),
+            ConvBNAct(c_out, c_out, k=3, s=1)
+        )
+        self.out_fuse = nn.Sequential(
+            ConvBNAct(c_out + c_td, c_out, k=1, s=1),
+            ConvBNAct(c_out, c_out, k=3, s=1)
+        )
+
+    def forward(self, x_rgb, x_ir, x_td):
+        cur = torch.cat([x_rgb, x_ir], dim=1)
+        cur = self.cur_fuse(cur)
+
+        x = torch.cat([cur, x_td], dim=1)
+        x = self.out_fuse(x)
+        return x
+
+
+class RGBIRStage0Baseline(nn.Module):
+    """
+    Stage 0 baseline:
+        RGB backbone
+        IR backbone
+        取 S3/S4/S5
+        简单高层融合成 F5
+        简单 top-down 多尺度融合成 F4/F3
+        输出 [P3, P4, P5]
+
+    输出给 YOLO neck/head 用。
+    """
+
+    def __init__(
+        self,
+        rgb_weights='',
+        ir_weights='',
+        backbone_type='s',   # 's' or 't'
+        img_size=640,
+    ):
+        super().__init__()
+
+        if backbone_type == 's':
+            # 这里我建议和你当前能对上的版本一致
+            # 注意：为了和你贴出来的 DACnet_s_mul 对齐，这里我把 stage3 改成 320
+            self.rgb_backbone = DACNet(
+                img_size=img_size,
+                embed_dims=[64, 128, 320, 512],
+                depths=[2, 2, 1, 1],
+                drop_rate=0.1,
+                drop_path_rate=0.1
+            )
+            self.ir_backbone = DACNet(
+                img_size=img_size,
+                embed_dims=[64, 128, 320, 512],
+                depths=[2, 2, 1, 1],
+                drop_rate=0.1,
+                drop_path_rate=0.1
+            )
+
+            if rgb_weights:
+                self.rgb_backbone.load_state_dict(
+                    update_weight(self.rgb_backbone.state_dict(), torch.load(rgb_weights)),
+                    strict=True
+                )
+            if ir_weights:
+                self.ir_backbone.load_state_dict(
+                    update_weight(self.ir_backbone.state_dict(), torch.load(ir_weights)),
+                    strict=True
+                )
+
+            c3, c4, c5 = 128, 320, 512
+
+        elif backbone_type == 't':
+            self.rgb_backbone = DACNet(
+                img_size=img_size,
+                embed_dims=[32, 64, 160, 256],
+                depths=[3, 3, 5, 2],
+                drop_rate=0.1,
+                drop_path_rate=0.1
+            )
+            self.ir_backbone = DACNet(
+                img_size=img_size,
+                embed_dims=[32, 64, 160, 256],
+                depths=[3, 3, 5, 2],
+                drop_rate=0.1,
+                drop_path_rate=0.1
+            )
+
+            if rgb_weights:
+                self.rgb_backbone.load_state_dict(
+                    update_weight(self.rgb_backbone.state_dict(), torch.load(rgb_weights)['state_dict']),
+                    strict=True
+                )
+            if ir_weights:
+                self.ir_backbone.load_state_dict(
+                    update_weight(self.ir_backbone.state_dict(), torch.load(ir_weights)['state_dict']),
+                    strict=True
+                )
+
+            c3, c4, c5 = 64, 160, 256
+
+        else:
+            raise ValueError(f'Unsupported backbone_type: {backbone_type}')
+
+        # -------- 高层融合 --------
+        self.fuse5 = SimpleFusion(c5, c5, c5)
+
+        # top-down 降通道，避免拼接时通道太大
+        self.reduce5_to_4 = ConvBNAct(c5, c4, k=1, s=1)
+        self.reduce4_to_3 = ConvBNAct(c4, c3, k=1, s=1)
+
+        # -------- 多尺度融合 --------
+        self.fuse4 = SimpleFusionWithTopDown(c4, c4, c4, c4)
+        self.fuse3 = SimpleFusionWithTopDown(c3, c3, c3, c3)
+
+        # 输出通道，供 YOLO 后续 Detect 使用
+        self.channel = [c3, c4, c5]
+
+    def forward(self, x_rgb, x_ir):
+        """
+        输入:
+            x_rgb: [B, 3, H, W]
+            x_ir : [B, 3, H, W]
+        输出:
+            [P3, P4, P5]
+        """
+
+        rgb_feats = self.rgb_backbone(x_rgb)   # 4 stages
+        ir_feats = self.ir_backbone(x_ir)      # 4 stages
+
+        # 取 S3/S4/S5 = 1/8, 1/16, 1/32
+        s3_rgb, s4_rgb, s5_rgb = rgb_feats[1], rgb_feats[2], rgb_feats[3]
+        s3_ir,  s4_ir,  s5_ir  = ir_feats[1],  ir_feats[2],  ir_feats[3]
+
+        # 1) 高层融合
+        f5 = self.fuse5(s5_rgb, s5_ir)   # [B, c5, H/32, W/32]
+
+        # 2) top-down 到 F4
+        f5_up = F.interpolate(self.reduce5_to_4(f5), size=s4_rgb.shape[-2:], mode='nearest')
+        f4 = self.fuse4(s4_rgb, s4_ir, f5_up)  # [B, c4, H/16, W/16]
+
+        # 3) top-down 到 F3
+        f4_up = F.interpolate(self.reduce4_to_3(f4), size=s3_rgb.shape[-2:], mode='nearest')
+        f3 = self.fuse3(s3_rgb, s3_ir, f4_up)  # [B, c3, H/8, W/8]
+
+        return [f3, f4, f5]
+
+
+
+
+
+
+
+
+
 def update_weight(model_dict, weight_dict):
     idx, temp_dict = 0, {}
     for k, v in weight_dict.items():
@@ -531,10 +728,16 @@ def DACnet_s(weights=''): #/home/qjc/Project/yolov10-main/DAC_s_backbone.pth
     return model
 
 if __name__ == '__main__':
-    model = DACnet_t_mul('/home/qjc/Project/yolov10-main/DAC_t_backbone.pth.tar')
-    inputs = torch.randn((1, 3, 1024, 1024))
-    inputs_ir = torch.randn((1, 3, 1024, 1024))
-    # inputs = torch.randn((1, 3, 640, 640))
-    # inputs_ir = torch.randn((1, 3, 640, 640))
-    for i in model(inputs, inputs_ir):
-        print(i.size())
+    model = RGBIRStage0Baseline(
+        rgb_weights='',
+        ir_weights='',
+        backbone_type='s',
+        img_size=640
+    )
+
+    x_rgb = torch.randn(1, 3, 1024, 1024)
+    x_ir  = torch.randn(1, 3, 1024, 1024)
+
+    outs = model(x_rgb, x_ir)
+    for i, y in enumerate(outs):
+        print(f'P{i+3}: {y.shape}')

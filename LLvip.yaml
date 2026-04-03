@@ -1,6 +1,6 @@
-train: /home/qjc/DataSet/LLvip/LLVIP/visible/train
-test: /home/qjc/DataSet/LLvip/LLVIP/visible/test
-val: /home/qjc/DataSet/LLvip/LLVIP/visible/test
+train: /home/hjy/workspace/datasets/LLVIP/visible/train
+test: /home/hjy/workspace/datasets/LLVIP/visible/test
+val: /home/hjy/workspace/datasets/LLVIP/visible/test
 
 
 # number of classes

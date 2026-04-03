@@ -11,9 +11,11 @@ import torch.nn as nn
 
 
 from ultralytics.nn.backbone.DACnet_mul import *
+from ultralytics.nn.backbone.DACnet_inn_mul import DACNet_INN_mul, DACnet_inn_s_mul, DACnet_inn_t_mul
 
 
 import ast
+
 
 from ultralytics.nn.modules import (
     AIFI,
@@ -59,7 +61,7 @@ RepNCSPELAN4, ADown, SPPELAN,ResNetLayer
 )
 from ultralytics.utils import DEFAULT_CFG_DICT, DEFAULT_CFG_KEYS, LOGGER, colorstr, emojis, yaml_load
 from ultralytics.utils.checks import check_requirements, check_suffix, check_yaml
-from ultralytics.utils.loss import v8ClassificationLoss, v8DetectionLoss, v8OBBLoss, v8PoseLoss, v8SegmentationLoss, v10DetectLoss
+from ultralytics.utils.loss import v8ClassificationLoss, v8DetectionLoss, v8DetectionLossWithAux, v8OBBLoss, v8PoseLoss, v8SegmentationLoss, v10DetectLoss
 from ultralytics.utils.plotting import feature_visualization, feature_visualization_all
 from ultralytics.utils.torch_utils import (
     fuse_conv_and_bn,
@@ -137,8 +139,15 @@ class BaseModel(nn.Module):
                 self._profile_one_layer(m, x, dt)
 
             if hasattr(m, 'backbone'):  # backbone handling
-                x = m(x, x_ir)
-                # x = m(x)
+                result = m(x, x_ir)
+                # result = m(x)
+                # 处理 (features, aux_dict) 元组返回（INN 主干）
+                if isinstance(result, tuple) and len(result) == 2 and isinstance(result[1], dict):
+                    x = result[0]
+                    self._aux_losses = result[1]
+                else:
+                    x = result
+                    self._aux_losses = None
                 for _ in range(5 - len(x)):
                     x.insert(0, None)
                 for i_idx, i in enumerate(x):
@@ -296,6 +305,9 @@ class BaseModel(nn.Module):
             else:
                 print("--------No ir_input--------")
                 preds = self.forward(batch["img"])
+        aux = getattr(self, '_aux_losses', None)
+        if aux is not None and hasattr(self.criterion, 'compute_aux_loss'):
+            return self.criterion(preds, batch, aux_losses=aux)
         return self.criterion(preds, batch)
 
     def init_criterion(self):
@@ -329,8 +341,12 @@ class DetectionModel(BaseModel):
             Segment, Pose, OBB)) else self.forward(x_rgb, x_ir)
             if isinstance(m, v10Detect):
                 forward = lambda x_rgb, x_ir: self.forward(x_rgb, x_ir)["one2many"]
-            m.stride = torch.tensor(
-                [s / x.shape[-2] for x in forward(torch.zeros(1, ch, s, s), torch.zeros(1, ch, s, s))])  # forward
+            with torch.no_grad():
+                m.stride = torch.tensor(
+                    [s / x.shape[-2] for x in forward(torch.zeros(1, ch, s, s), torch.zeros(1, ch, s, s))]
+                )  # forward
+            # clear probe-time aux tensors to avoid deepcopy crash in EMA
+            self._aux_losses = None
             self.stride = m.stride
             m.bias_init()  # only run once
         else:
@@ -381,7 +397,7 @@ class DetectionModel(BaseModel):
 
     def init_criterion(self):
         """Initialize the loss criterion for the DetectionModel."""
-        return v8DetectionLoss(self)
+        return v8DetectionLossWithAux(self)
 
 
 class OBBModel(DetectionModel):
@@ -753,7 +769,8 @@ def torch_safe_load(weight):
                 "ultralytics.yolo.data": "ultralytics.data",
             }
         ):  # for legacy 8.0 Classify and Pose models
-            ckpt = torch.load(file, map_location="cpu")
+            # ckpt = torch.load(file, map_location="cpu")
+            ckpt = torch.load(file, map_location="cpu", weights_only=False)
 
     except ModuleNotFoundError as e:  # e.name is missing module name
         if e.name == "models":
@@ -773,7 +790,8 @@ def torch_safe_load(weight):
             f"run a command with an official YOLOv8 model, i.e. 'yolo predict model=yolov8n.pt'"
         )
         check_requirements(e.name)  # install missing module
-        ckpt = torch.load(file, map_location="cpu")
+        # ckpt = torch.load(file, map_location="cpu")
+        ckpt = torch.load(file, map_location="cpu", weights_only=False)
 
     if not isinstance(ckpt, dict):
         # File is likely a YOLO instance saved with i.e. torch.save(model, "saved_model.pt")
@@ -930,7 +948,7 @@ def process_layer(d, f, n, m, args, depth, width, ch, max_channels, nc, is_backb
             n = 1
     elif m is AIFI:
         args = [ch[f], *args]
-    elif m in {DACnet_s, DACnet_t,DACnet_s_mul, DACnet_t_mul}:
+    elif m in {DACnet_s, DACnet_t, DACnet_s_mul, DACnet_t_mul, DACnet_inn_s_mul, DACnet_inn_t_mul}:
         m = m(*args)
         c2 = m.channel
     elif m in (HGStem, HGBlock):

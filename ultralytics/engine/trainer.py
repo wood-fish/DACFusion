@@ -482,6 +482,9 @@ class BaseTrainer:
 
         metrics = {**self.metrics, **{"fitness": self.fitness}}
         results = {k.strip(): v for k, v in pd.read_csv(self.csv).to_dict(orient="list").items()}
+        # training-time aux tensors may hold graph-connected non-leaf tensors and break deepcopy
+        if hasattr(de_parallel(self.model), "_aux_losses"):
+            de_parallel(self.model)._aux_losses = None
         ckpt = {
             "epoch": self.epoch,
             "best_fitness": self.best_fitness,

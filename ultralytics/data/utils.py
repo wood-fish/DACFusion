@@ -44,9 +44,9 @@ def img2label_paths(img_paths):
     """Define label paths as a function of image paths."""
 
     if 'LLVIP/visible/train' in img_paths[0]:
-        sa, sb = f"{os.sep}visible/train{os.sep}", f"{os.sep}labels{os.sep}"
+        sa, sb = f"{os.sep}visible/train{os.sep}", f"{os.sep}labels/train{os.sep}"
     elif 'LLVIP/visible/test' in img_paths[0]:
-        sa, sb = f"{os.sep}visible/test{os.sep}", f"{os.sep}labels{os.sep}"
+        sa, sb = f"{os.sep}visible/test{os.sep}", f"{os.sep}labels/test{os.sep}"
     elif 'visible' in img_paths[0]:
         sa, sb = f"{os.sep}visible{os.sep}", f"{os.sep}labels{os.sep}"
     # elif 'images_rgb_train' in img_paths[0]:

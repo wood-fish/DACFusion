@@ -1,0 +1,34 @@
+# DACFusion-INN: 高层语义引导 + 可逆解耦 + 跨模态对齐 + 多尺度融合
+# YOLOv8 object detection model with P3-P5 outputs
+
+# Parameters
+nc: 9  # number of classes
+
+scales:
+  m: [0.67, 0.75, 768]
+
+# Backbone
+backbone:
+  - [-1, 1, DACnet_inn_s_mul, ['/home/hjy/workspace/DACFusion/DAC_s_backbone.pth']]  # 4
+  - [-1, 1, SPPF, [1024, 5]]  # 5
+  - [-1, 1, PSA, [1024]]  # 6
+
+# Head
+head:
+  - [-1, 1, nn.Upsample, [None, 2, "nearest"]]
+  - [[-1, 3], 1, Concat, [1]]  # cat backbone P4
+  - [-1, 3, C2f, [512]]  # 9
+
+  - [-1, 1, nn.Upsample, [None, 2, "nearest"]]
+  - [[-1, 2], 1, Concat, [1]]  # cat backbone P3
+  - [-1, 3, C2f, [256]]  # 12 (P3/8-small)
+
+  - [-1, 1, Conv, [256, 3, 2]]
+  - [[-1, 9], 1, Concat, [1]]  # cat head P4
+  - [-1, 3, C2fCIB, [512, True]]  # 15 (P4/16-medium)
+
+  - [-1, 1, SCDown, [512, 3, 2]]
+  - [[-1, 6], 1, Concat, [1]]  # cat head P5
+  - [-1, 3, C2fCIB, [1024, True]]  # 18 (P5/32-large)
+
+  - [[12, 15, 18], 1, Detect, [nc]]  # Detect(P3, P4, P5)
